@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElectronApp</title>
+</head>
+<style>
+    .container-video {
+        display: flex;
+        column-gap: 1rem;
+    }
+
+    video {
+        width: 100%;
+    }
+
+    .localvideo, .remotevideo {
+        display: flex;
+        flex-direction: column;
+        row-gap: 1rem;
+        max-width: calc(50% - 8px);
+    }    
+</style>
+<body>
+    <div class="container-video">
+        <div class="localvideo">
+            <video autoplay id="local"></video>
+            <select name="localsource" id="localsource"></select>
+        </div>
+        <div class="remotevideo">
+            <video autoplay id="remote"></video>
+        </div>
+    </div>
+</body>
+<script>
+    const localVideo = document.getElementById('local');
+    const remoteVideo = document.getElementById('remote');
+
+    function doLog(msg) {
+        window.api.doLog(msg)
+    }
+    
+    const offerOptions = {
+        offerToReceiveAudio: 1,
+        offerToReceiveVideo: 1
+    };
+
+    const serverOptions = {
+        iceServers: [
+            {
+                urls: 'stun:stun.l.google.com:19302'
+            },
+       ]
+    }
+
+    const localConnection = new RTCPeerConnection(serverOptions);
+    const remoteConnection = new RTCPeerConnection(serverOptions); 
+    
+    const localChannel = localConnection.createDataChannel('sendDataChannel');
+    localChannel.binaryType = 'arraybuffer';
+    localChannel.onopen = () => doLog('localChannel.onopen');
+    localChannel.onclose = () => doLog('localChannel.onclose');
+    localChannel.onmessage = (event) => {
+        doLog('localChannel.onmessage');
+        doLog(event.data);
+    }
+
+    let remoteChannel;
+
+    remoteConnection.ondatachannel = event => {
+        remoteChannel = event.channel;
+        remoteChannel.binaryType = 'arraybuffer';
+        remoteChannel.onopen = () => doLog('remoteChannel.onopen');
+        remoteChannel.onclose = () => doLog('remoteChannel.onclose');
+        remoteChannel.onmessage = (event) => {
+            doLog('remoteChannel.onmessage');
+            doLog(event.data);
+        }
+    }
+
+    function getOtherPc(pc) {
+        return (pc === localConnection) ? remoteConnection : localConnection;
+    }
+
+    async function onIceCandidate(pc, event) {
+        doLog(`${pc.iceGatheringState} - ${pc.iceConnectionState}`);
+        try {
+            await getOtherPc(pc).addIceCandidate(event.candidate);
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async function onCreateOfferSuccess(desc) {
+        doLog(`Offer from localConnection`);
+        doLog('localConnection setLocalDescription start');
+        try {
+            await localConnection.setLocalDescription(desc);
+        } catch (error) {
+            throw error;
+        }
+
+        doLog('remoteConnection setLocalDescription start');
+        try {
+            await remoteConnection.setRemoteDescription(desc);
+        } catch (error) {
+            throw error;
+        }
+
+        doLog('remoteConnection createAnswer start');
+        try {
+            const answer = await remoteConnection.createAnswer();
+            onCreateAnswerSuccess(answer);
+        } catch (error) {
+            throw error;            
+        }
+    }
+
+    async function onCreateAnswerSuccess(desc) {
+        doLog(`Answer from remoteConnection`);
+        doLog('remoteConnection setLocalDescription start');
+        try {
+            await remoteConnection.setLocalDescription(desc);
+        } catch (error) {
+            throw error;
+        }
+
+        doLog('localConnection setRemoteDescription start');
+        try {
+            await localConnection.setRemoteDescription(desc);
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    function gotRemoteStream(e) {
+        doLog('got remote stream');
+        if (remoteVideo.srcObject !== e.streams[0]) {
+            remoteVideo.srcObject = e.streams[0];
+            doLog('remoteConnection received remote stream')
+        }
+    }
+
+    localConnection.onicecandidate = event => onIceCandidate(localConnection, event);
+    remoteConnection.onicecandidate = event => onIceCandidate(remoteConnection, event);
+    remoteConnection.ontrack = event => gotRemoteStream(event)    
+    
+    async function call() {
+        try {
+            const offer = await localConnection.createOffer(offerOptions);
+            doLog('createOffer start');
+            onCreateOfferSuccess(offer);
+        } catch (error) {
+            throw error;        
+        }
+    }
+        
+    let currentTrack = null;
+
+    localVideo.addEventListener('loadedmetadata', () => {
+        if (!currentTrack) {
+            currentTrack = localVideo.srcObject.getTracks()[0];
+            localConnection.addTrack(currentTrack, localVideo.srcObject);
+
+            for (const source of window.api.sources()) {
+                const option = document.createElement('option');
+                option.value = source.id;
+                option.text = source.name;
+                document.getElementById('localsource').appendChild(option);
+            }
+
+            document.getElementById('localsource').addEventListener('change', async (event) => {
+                window.api.changeSource(event.srcElement.value);
+            });    
+
+            call();            
+        } else {
+            let sender = localConnection.getSenders().find(s => s.track.kind == currentTrack.kind);
+
+            if (sender) {
+                currentTrack = localVideo.srcObject.getTracks()[0];
+                sender.replaceTrack(currentTrack);
+            }
+        }
+    });
+
+</script>
+</html>
