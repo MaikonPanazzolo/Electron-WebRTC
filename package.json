@@ -5,11 +5,20 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron ."
+    "start": "electron .",
+    "app:dir": "electron-builder --dir",
+    "app:dist": "electron-builder -p never --win",
+    "app:setup": "electron-builder -p never --x64 --ia32"    
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^18.0.3"
+    "electron": "^18.0.3",
+    "electron-builder": "^23.0.3",
+    "electron-packager": "^15.5.1",
+    "electron-rebuild": "^3.2.7"
+  },
+  "dependencies": {
+    "@nut-tree/nut-js": "^2.0.1"
   }
 }

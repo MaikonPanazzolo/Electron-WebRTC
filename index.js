@@ -1,5 +1,6 @@
 const { app, desktopCapturer, ipcMain } = require('electron');
 const path = require('path');
+const { mouse, Point } = require('@nut-tree/nut-js');
 
 app.whenReady().then(() => {
     const { BrowserWindow } = require('electron');
@@ -27,6 +28,10 @@ app.whenReady().then(() => {
             }
         })    
     })
+
+    setTimeout(() => {
+        mouse.setPosition(new Point(100, 100));
+    }, 5000);
 
 })
 
